@@ -3,8 +3,10 @@ from rag_engine import RAGSystem
 import os
 import glob
 
+# Set up Streamlit page configuration
 st.set_page_config(page_title="RAG Demo for AI Learning", page_icon="🤖")
 
+# App title and description
 st.title("AI Book Assistant")
 st.markdown("---")
 
