@@ -1,5 +1,5 @@
 # PDF books (large files)
-data/*.pdf
+data/docs/*.pdf
 
 # Python
 __pycache__/

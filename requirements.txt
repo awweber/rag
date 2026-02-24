@@ -3,6 +3,8 @@ langchain
 langchain-community
 langchain-openai
 langchain-text-splitters
+langchain-huggingface
+langchain-chroma
 pypdf
 chromadb
 sentence-transformers

@@ -1,76 +1,177 @@
-# RAG (Retrieval-Augmented Generation)
+# Industrie-KI Assistent – RAG + SQL Agent
 
-This demo project allows you to upload PDF books and ask questions about their content. The system uses Retrieval-Augmented Generation (RAG) to provide accurate answers based on the uploaded documents. A local LLM is used to process the questions and generate responses.
+Ein Assistenzsystem für wissenschaftliche Mitarbeiter, das Wissen aus unstrukturierten PDFs (Forschungsberichte) mit strukturierten Messdaten (SQL) verknüpft. Der Fokus liegt auf **Datensouveränität** durch lokale LLM-Inferenz via LM Studio.
 
-## Project Structure
-The following structure is a recommendation for organizing your RAG project. You can of course adjust it to your needs, but it provides a clear separation between data, logic, and user interface.
+## Architektur
+
+```
+Nutzeranfrage
+      │
+      ▼
+┌─────────────┐
+│  Streamlit   │  ← Chat-Interface mit Memory
+│   (app.py)   │
+└──────┬───────┘
+       │
+       ▼
+┌─────────────────┐
+│  Intelligenter   │  ← Zweistufiger Router-Agent
+│  Agent (agent.py)│
+└───┬─────────┬───┘
+    │         │
+    ▼         ▼
+┌────────┐ ┌───────────┐
+│ vector │ │ sql_query  │
+│_search │ │            │
+└───┬────┘ └─────┬─────┘
+    │            │
+    ▼            ▼
+┌────────────┐ ┌──────────────┐
+│ ChromaDB   │ │ SQLite       │
+│ (PDFs)     │ │ (Messdaten)  │
+│rag_engine  │ │ sql_engine   │
+└────────────┘ └──────────────┘
+```
+
+## Projektstruktur
 
 ```
 RAG/
-├── data/               # Store your PDF books here
-├── app.py              # The main script (Streamlit UI)
-├── rag_engine.py       # Logic for PDF processing & RAG
-└── requirements.txt    # Required libraries
+├── data/
+│   ├── docs/              # PDF-Dokumente hier ablegen
+│   ├── industrie_ki.db    # SQLite-Datenbank (wird von setup_db.py erstellt)
+│   └── chroma_db/         # Persistente Vektordatenbank (wird automatisch erstellt)
+├── app.py                 # Streamlit Web-Oberfläche (UI)
+├── rag_engine.py          # Modul A: Document-RAG (unstrukturierte Daten)
+├── sql_engine.py          # Modul B: SQL-Analytics (strukturierte Daten)
+├── agent.py               # Modul C: Intelligenter Agent (Orchestrierung)
+├── setup_db.py            # SQLite-Datenbank erstellen & befüllen
+├── requirements.txt       # Python-Abhängigkeiten
+└── README.md
 ```
 
-## Installation 
+## Installation
 
-### Installation of python environment
-To set up your Python environment, you can use conda to create a virtual environment:
+### 1. Python-Umgebung erstellen
+
 ```bash
 conda create -n rag_env python=3.11 -y
 conda activate rag_env
 ```
 
-### Install required libraries
+### 2. Abhängigkeiten installieren
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
+### 3. SQLite-Datenbank erstellen
 
-In order to run the RAG demo, you need to start the local LLM server (LM Studio) and then run the Streamlit app. Follow the steps below:
+```bash
+python setup_db.py
+```
 
-### 1. Start the local LLM server (LM Studio)
-1. Open **LM Studio**
-2. Download the model **Mistral-7B-Instruct** (if not already downloaded)
-3. Go to the **Local Server** tab (left sidebar)
-4. Load the Mistral-7B-Instruct model
-5. Click **Start Server** — it will run on `http://localhost:1234`
-6. Verify the server is running: you should see "Server started" in the LM Studio logs
+### 4. PDF-Dokumente ablegen
 
-### 2. Run the Streamlit app
-Make sure your conda environment is activated, then start the app:
+Lege deine PDF-Dateien (Forschungsberichte, Handbücher) in den Ordner `data/docs/`:
+
+```bash
+cp mein_dokument.pdf data/docs/
+```
+
+## Nutzung
+
+### 1. LM Studio starten
+
+1. **LM Studio** öffnen
+2. Modell **Mistral-7B-Instruct** herunterladen (falls nötig)
+3. **Local Server** Tab → Modell laden → **Start Server** (Port 1234)
+4. Verifizieren: „Server started" in den LM Studio Logs
+
+### 2. Streamlit-App starten
+
 ```bash
 conda activate rag_env
 streamlit run app.py
 ```
-The app will open in your browser at `http://localhost:8501`. You can now ask questions about the PDF books stored in the `data/` folder.
 
-## Files Overview
+Die App öffnet sich unter `http://localhost:8501`.
 
-### Main Script: app.py
-This file contains the Streamlit user interface, allowing the user to upload PDFs, ask questions, and receive answers. It communicates with `rag_engine.py` to handle the logic for processing the PDFs and generating the answers.
+## Features
 
-### Backend: rag_engine.py
-This file handles the "backend" – corresponding to the interface between the user and the backend. It is responsible for processing the PDFs, indexing their content, and interacting with the local LLM to generate answers based on the retrieved information.
+### Modul A: Document-RAG (Unstrukturiert)
+- **Loader**: `PyPDFLoader` liest PDFs aus `./data/docs/`
+- **Chunking**: `RecursiveCharacterTextSplitter` (600 Zeichen, 100 Overlap)
+- **Embeddings**: `all-MiniLM-L6-v2` (lokal, keine API nötig)
+- **Vektordatenbank**: ChromaDB mit Persistenz auf Disk
+- **Quellenangaben**: Seitenzahlen werden in Antworten referenziert
 
-## Libraries & Pipeline
+### Modul B: SQL-Analytics (Strukturiert)
+- **Datenbank**: SQLite (`data/industrie_ki.db`)
+- **Text-to-SQL**: LLM generiert SQL aus natürlicher Sprache
+- **Sicherheit**: Nur SELECT-Abfragen erlaubt, gefährliche Keywords blockiert
+- **Tabellen**: Maschinenstatus, Anomalie-Logs, KI-Projekte, Sensor-Statistiken
 
-The RAG pipeline in `rag_engine.py` uses the following components:
+### Modul C: Intelligenter Agent (Orchestrierung)
+- **Zweistufiger Router-Agent** (kompatibel mit lokalen LLMs, die nur user/assistant-Rollen unterstützen)
+  - **Schritt 1 – Router**: LLM wählt das passende Tool und formuliert den Input (JSON-Antwort)
+  - **Schritt 2 – Answer**: LLM formuliert die finale Antwort aus dem Tool-Ergebnis
+- **Tool 1** (`vector_search`): Für Fragen zu Dokumenten/Konzepten
+- **Tool 2** (`sql_query`): Für Fragen zu Messwerten/Zahlen
+- **Transparenz**: Agent-Logs zeigen Routing-Entscheidung und Tool-Ergebnisse
 
-| Step | Library | Purpose |
-|------|---------|---------|
-| **PDF Loading** | `langchain_community.document_loaders.PyPDFLoader` | Reads PDF files page-by-page and extracts the text content along with page metadata |
-| **Text Splitting** | `langchain_text_splitters.RecursiveCharacterTextSplitter` | Splits the extracted text into smaller, overlapping chunks (600 chars, 100 overlap) for more precise retrieval |
-| **Embeddings** | `langchain_community.embeddings.HuggingFaceEmbeddings` | Converts text chunks into vector representations using the `all-MiniLM-L6-v2` model (runs locally, no API needed) |
-| **Vector Store** | `langchain_community.vectorstores.Chroma` | Stores the embedded chunks in a ChromaDB vector database for fast similarity search |
-| **LLM Connection** | `langchain_openai.ChatOpenAI` | Connects to the local LM Studio server (localhost:1234) using the OpenAI-compatible API |
-| **Prompt Template** | `langchain_core.prompts.ChatPromptTemplate` | Defines the instruction template that injects retrieved context into the LLM prompt |
-| **Output Parsing** | `langchain_core.output_parsers.StrOutputParser` | Extracts the plain text response from the LLM output |
-| **Chain Composition** | LCEL (LangChain Expression Language) | Pipes the components together: `prompt | llm | parser` |
+### UI/UX
+- **Chat-Interface** mit Konversationshistorie
+- **LLM-Verbindungsstatus** in der Sidebar
+- **Expander-Widgets** für Agent-Logs und Quellen-Chunks
+- **PDF-Auswahl** und Datenbank-Übersicht in der Sidebar
 
-#### Pydantic
+## Routing-Ansätze im Überblick
 
-`pydantic.SecretStr` is used to wrap the LM Studio API key, which prevents accidental exposure in logs or error messages. LangChain itself uses Pydantic extensively under the hood for model configuration and validation of all chain components.
+Der Agent muss eingehende Fragen dem richtigen Tool zuweisen. Dafür existieren verschiedene Routing-Strategien:
+
+| Ansatz | Funktionsweise | Latenz | Genauigkeit | Benötigt LLM? |
+|---|---|---|---|---|
+| **Keyword-basiert** | Regelwerk mit Schlüsselwörtern (z. B. *„Sensor"* → SQL, *„Konzept"* → RAG) | ⚡ Sehr gering | Niedrig – versagt bei Umschreibungen | Nein |
+| **LLM-basiert** ⭐ | LLM analysiert die Frage und wählt das Tool per JSON-Antwort | 🐢 Hoch (LLM-Call) | Hoch – versteht Kontext und Nuancen | Ja |
+| **Semantisches Routing** | Embedding der Frage wird per Kosinus-Ähnlichkeit mit Referenz-Embeddings verglichen | ⚡ Gering | Mittel–Hoch | Nein (nur Embedding-Modell) |
+| **Klassifikation (trainiert)** | Supervised-Modell (z. B. Logistic Regression, BERT) auf gelabelten Beispielen | ⚡ Gering | Sehr hoch (mit guten Trainingsdaten) | Nein |
+| **Zero-Shot-Klassifikation** | Vortrainiertes NLI-Modell ordnet Fragen Kategorien zu (z. B. `bart-large-mnli`) | 🔶 Mittel | Mittel–Hoch | Nein (NLI-Modell) |
+| **Hybrid** | Kombination mehrerer Ansätze (z. B. Keyword-Vorfilter + Semantic Fallback) | 🔶 Variabel | Hoch | Optional |
+
+### Aktuelle Implementierung
+
+Dieses Projekt verwendet **LLM-basiertes Routing** (Zweistufiger Router-Agent in `agent.py`):
+
+1. **Router-Schritt**: Ein `ChatPromptTemplate` beschreibt die verfügbaren Tools. Das LLM antwortet mit `{"tool": "<name>", "input": "<input>"}`.
+2. **Answer-Schritt**: Das Tool-Ergebnis wird dem LLM übergeben, das die finale Nutzerantwort formuliert.
+
+**Warum LLM-basiert?** Für einen Prototyp mit zwei Tools bietet LLM-Routing die beste Balance aus Genauigkeit und Implementierungsaufwand. Es erfordert keine Trainingsdaten und versteht auch umformulierte oder mehrdeutige Fragen zuverlässig. Bei Skalierung auf viele Tools wäre ein Wechsel zu semantischem oder hybridem Routing sinnvoll.
+
+## Technischer Stack
+
+| Komponente | Technologie | Paket |
+|---|---|---|
+| Sprache | Python 3.11+ | – |
+| Frontend | Streamlit | `streamlit` |
+| LLM | LM Studio (Mistral-7B, lokal) | `langchain-openai` |
+| LLM-Framework | LangChain (OpenAI-kompatible API) | `langchain`, `langchain-core` |
+| Vektordatenbank | ChromaDB | `langchain-chroma`, `chromadb` |
+| Relationale DB | SQLite | Python-Standard |
+| Embeddings | sentence-transformers/all-MiniLM-L6-v2 | `langchain-huggingface`, `sentence-transformers` |
+| PDF-Loader | PyPDFLoader | `langchain-community`, `pypdf` |
+| Text-Splitting | RecursiveCharacterTextSplitter | `langchain-text-splitters` |
+
+## Pipeline-Details
+
+| Schritt | Library | Import-Pfad | Zweck |
+|---|---|---|---|
+| PDF-Laden | `PyPDFLoader` | `langchain_community.document_loaders` | PDF-Seiten extrahieren |
+| Text-Splitting | `RecursiveCharacterTextSplitter` | `langchain_text_splitters` | Chunks erzeugen (600 Zeichen, 100 Overlap) |
+| Embeddings | `HuggingFaceEmbeddings` | `langchain_huggingface` | Lokale Vektorisierung mit `all-MiniLM-L6-v2` |
+| Vektorspeicher | `Chroma` | `langchain_chroma` | Ähnlichkeitssuche auf Dokumenten-Chunks |
+| LLM-Anbindung | `ChatOpenAI` | `langchain_openai` | Verbindung zu LM Studio (localhost:1234) |
+| Prompts | `ChatPromptTemplate` | `langchain_core.prompts` | Prompt-Templates für alle LLM-Aufrufe |
+| Text-to-SQL | `ChatOpenAI` + Few-Shot Prompt | `langchain_openai` | Natürliche Sprache → SQL SELECT |
+| Agent | Manueller Router-Agent | `agent.py` (eigene Implementierung) | Zweistufige Tool-Auswahl (Router → Answer) |
+| UI | `Streamlit` | `streamlit` | Chat, Sidebar, Expander-Widgets |
